@@ -1,0 +1,44 @@
+{
+  "name": "langgraph-research-system",
+  "version": "0.1.0",
+  "description": "LangGraph-based state machine paper research system",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "test": "bun test",
+    "start": "tsx src/index.ts",
+    "api": "tsx src/api.ts",
+    "verify": "tsx verify.ts",
+    "single": "tsx src/index.ts single",
+    "review": "tsx src/index.ts review",
+    "multi": "tsx src/index.ts multi",
+    "config": "tsx src/index.ts config"
+  },
+  "keywords": [
+    "langgraph",
+    "agent",
+    "ai",
+    "research",
+    "paper",
+    "state-machine"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "chromadb": "^2.0.0",
+    "commander": "^12.0.0",
+    "express": "^4.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "bun-types": "latest",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2"
+  }
+}
