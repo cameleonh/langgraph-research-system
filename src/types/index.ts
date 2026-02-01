@@ -260,3 +260,35 @@ export interface StatisticalInfo {
     pValue?: number;
   }>;
 }
+
+/**
+ * Research proposal for evaluation
+ */
+export interface ResearchProposal {
+  title: string;
+  topic: string;
+  researchQuestions: string[];
+  hypotheses?: string[];
+  methodology: string;
+  data: string;
+  variables?: string;
+  expectedResults: string;
+  policyImplications: string;
+  fullText?: string;
+}
+
+/**
+ * Research proposal evaluation result
+ */
+export interface ProposalEvaluation {
+  overallScore: number;
+  academicRigor: number;
+  methodology: number;
+  dataQuality: number;
+  policyRelevance: number;
+  strengths: string[];
+  weaknesses: string[];
+  suggestions: string[];
+  summary: string;
+  rating: 'excellent' | 'good' | 'fair' | 'poor';
+}
