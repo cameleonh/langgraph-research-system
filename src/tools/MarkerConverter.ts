@@ -28,11 +28,19 @@ const DEFAULT_OPTIONS: ConversionOptions = {
  */
 export class MarkerConverter {
   private config = getConfig();
-  private markerPath?: string;
+  private condaPath = 'C:\\ProgramData\\Anaconda3\\Scripts\\conda.exe';
+  private condaEnv = 'LangGraph';
+  private useConda = true;
 
   constructor(markerPath?: string) {
-    this.markerPath = markerPath;
+    // If markerPath is provided, use it directly (legacy mode)
+    if (markerPath) {
+      this.markerPath = markerPath;
+      this.useConda = false;
+    }
   }
+
+  private markerPath?: string;
 
   /**
    * Check if Marker is installed and available
@@ -61,28 +69,27 @@ export class MarkerConverter {
       // Validate input file exists
       await fs.access(pdfPath);
 
-      // Prepare output path
-      const outputDir = path.dirname(pdfPath);
-      const baseName = path.basename(pdfPath, '.pdf');
-      const outputPath = path.join(outputDir, `${baseName}.md`);
-
-      logger.info(`Converting PDF: ${pdfPath}`);
+      // Prepare output path - Marker saves to ./output/{basename} by default
+      const baseName = path.basename(pdfPath, '.pdf').replace('.pdf', '');
+      const markerOutputPath = path.join(process.cwd(), 'output', baseName, baseName + '.md');
 
       // Build Marker command arguments
-      const args = this.buildArgs(pdfPath, outputPath, opts);
+      const args = this.buildArgs(pdfPath, markerOutputPath, opts);
 
       // Run Marker conversion
       const result = await this.runCommand(args);
 
       if (!result.success) {
-        return {
-          success: false,
-          error: result.error || 'Marker conversion failed',
-        };
+      return {
+        success: false,
+        data: undefined,
+        error: result.error || 'Marker conversion failed',
+        metadata: undefined,
+      };
       }
 
       // Read the generated Markdown
-      const markdown = await fs.readFile(outputPath, 'utf-8');
+      const markdown = await fs.readFile(markerOutputPath, 'utf-8');
 
       // Extract metadata from the Markdown
       const metadata = this.extractMetadata(markdown);
@@ -103,7 +110,7 @@ export class MarkerConverter {
         },
         metadata: {
           pdfPath,
-          outputPath,
+          outputPath: markerOutputPath,
           wordCount: this.countWords(markdown),
         },
       };
@@ -114,7 +121,9 @@ export class MarkerConverter {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -127,6 +136,16 @@ export class MarkerConverter {
     options: Partial<ConversionOptions> = {}
   ): Promise<ToolResult<ConversionResult[]>> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+
+    if (pdfPaths.length === 0) {
+      return {
+        success: false,
+        data: undefined,
+        error: 'No PDF paths provided',
+        metadata: undefined,
+      };
+    }
+
     const startTime = Date.now();
 
     logger.info(`Batch converting ${pdfPaths.length} PDFs`);
@@ -160,7 +179,7 @@ export class MarkerConverter {
 
     const processingTime = Date.now() - startTime;
 
-    logger.info(`Batch conversion completed: ${results.successful}/${pdfPaths.length} successful in ${processingTime}ms`);
+    logger.info(`Batch conversion completed: ${results.length}/${pdfPaths.length} successful in ${processingTime}ms`);
 
     return {
       success: errors.length === 0,
@@ -178,6 +197,7 @@ export class MarkerConverter {
 
   /**
    * Build command arguments for Marker
+   * Note: Marker has limited options, only using supported ones
    */
   private buildArgs(
     inputPath: string,
@@ -186,47 +206,58 @@ export class MarkerConverter {
   ): string[] {
     const args: string[] = [];
 
-    // Input file
+    // Input file (Marker will save to its default output directory)
     args.push(inputPath);
-
-    // Output file
-    args.push('-o', outputPath);
-
-    // Output format
-    if (options.outputFormat === 'text') {
-      args.push('--fmt', 'txt');
-    }
 
     // GPU settings
     if (!options.gpuEnabled) {
       args.push('--cpu-only');
+      logger.info('GPU disabled: Using CPU-only mode');
+    } else {
+      logger.info('GPU enabled: Marker will use GPU acceleration if available');
     }
 
-    // Image extraction
-    if (options.extractImages) {
-      args.push('--extract-images');
+    // Image extraction (disable by default for speed)
+    if (!options.extractImages) {
+      args.push('--disable_image_extraction');
     }
 
-    // Layout preservation
-    if (options.preserveLayout) {
-      args.push('--preserve-layout');
-    }
+    // Note: --preserve-layout is not supported in current marker-pdf
+    // Note: -o output option is not supported, Marker uses fixed output path
 
     return args;
   }
 
   /**
-   * Run Marker command
-   */
+    * Run Marker command
+    */
   private async runCommand(
     args: string[],
     quiet = false
   ): Promise<ToolResult<string>> {
     return new Promise((resolve) => {
-      const markerCmd = this.markerPath || 'marker';
+      let command: string;
+      let commandArgs: string[];
 
-      const proc = spawn(markerCmd, args, {
+      if (this.useConda) {
+        // Use conda run to execute marker in the conda environment
+        command = this.condaPath;
+        // Quote paths with spaces or special characters
+        commandArgs = ['run', '-n', this.condaEnv, 'marker_single', ...args.map(a => a.includes(' ') ? `"${a}"` : a)];
+        logger.debug(`Using conda env: ${this.condaEnv}`);
+      } else {
+        // Legacy mode: use marker_single directly
+        command = this.markerPath!;
+        commandArgs = args;
+      }
+
+      const proc = spawn(command, commandArgs, {
         stdio: quiet ? 'pipe' : 'inherit',
+        shell: true,
+        env: {
+          ...process.env,
+          KMP_DUPLICATE_LIB_OK: 'TRUE',
+        },
       });
 
       let stdout = '';

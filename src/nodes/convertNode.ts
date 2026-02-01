@@ -27,13 +27,38 @@ export async function convertNode(state: State): Promise<StateUpdate> {
       log: [`Starting conversion: ${state.pdfPath}`],
     };
 
+    // Check if markdown already exists (from previous conversion)
+    // Conda environment path: C:\Users\honey\.conda\envs\LangGraph\Lib\site-packages\conversion_results
+    const markerOutputDir = path.join(process.env.USERPROFILE || '', '.conda', 'envs', 'LangGraph', 'Lib', 'site-packages', 'conversion_results');
+    const markerMarkdownPath = path.join(markerOutputDir, path.basename(state.pdfPath, '.pdf').replace('.pdf', ''), path.basename(state.pdfPath, '.pdf').replace('.pdf', '') + '.md');
+    
+    let markdown: string | null = null;
+
+    // Check if markdown file already exists
+    try {
+      await fs.access(markerMarkdownPath);
+      markdown = await fs.readFile(markerMarkdownPath, 'utf-8');
+      logger.info(`Found existing markdown: ${markerMarkdownPath}, skipping conversion`);
+      
+      return {
+        status: 'analyzing',
+        markdown,
+        metadata: {
+          filename: path.basename(state.pdfPath),
+          filepath: state.pdfPath,
+          fromExisting: true,
+        },
+      };
+    } catch {
+      // Markdown doesn't exist, perform conversion
+    }
+
     // Check if PDF exists
     try {
       await fs.access(state.pdfPath);
     } catch {
       logger.error(`PDF not found: ${state.pdfPath}`);
       return {
-        ...update,
         status: 'error',
         error: `PDF file not found: ${state.pdfPath}`,
       };
@@ -50,13 +75,40 @@ export async function convertNode(state: State): Promise<StateUpdate> {
       filesize: stats.size,
     };
 
-    // Perform conversion
-    const result = await convertPDF(state.pdfPath);
+    // Perform conversion only if markdown not already found
+    let result;
+    if (!markdown) {
+      // Get GPU setting from config
+      const { getConfig } = await import('../config.js');
+      const config = getConfig();
+
+      logger.info(`GPU acceleration: ${config.marker.gpuEnabled ? 'ENABLED' : 'DISABLED'}`);
+
+      result = await convertPDF(state.pdfPath, {
+        gpuEnabled: config.marker.gpuEnabled,
+        batchSize: config.marker.batchSize,
+      });
+    } else {
+      result = {
+        success: true,
+        data: {
+          markdown,
+          metadata: {
+            processingTime: 0,
+            wordCount: markdown.split(/\s+/).length,
+          },
+        },
+        metadata: {
+          filename,
+          filepath: state.pdfPath,
+          fromExisting: true,
+        },
+      };
+    }
 
     if (!result.success || !result.data) {
       logger.error('PDF conversion failed', result.error);
       return {
-        ...update,
         status: 'error',
         error: result.error || 'Conversion failed',
       };

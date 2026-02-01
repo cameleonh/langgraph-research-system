@@ -396,8 +396,6 @@ export async function main() {
 }
 
 // Run API server if this file is executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main();
-}
+main();
 
 export default createApi;

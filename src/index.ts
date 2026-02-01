@@ -236,10 +236,12 @@ async function main() {
           console.log(JSON.stringify(config, null, 2));
         } else {
           console.log('\n📋 Current Configuration:\n');
-          console.log('Anthropic API:');
-          console.log(`  Model: ${config.anthropic.model}`);
-          console.log(`  Max Tokens: ${config.anthropic.maxTokens}`);
-          console.log(`  Temperature: ${config.anthropic.temperature}`);
+          console.log('LLM:');
+          console.log(`  Provider: ${config.llm.provider.toUpperCase()}`);
+          console.log(`  Model: ${config.llm.model}`);
+          console.log(`  Base URL: ${config.llm.baseURL}`);
+          console.log(`  Max Tokens: ${config.llm.maxTokens}`);
+          console.log(`  Temperature: ${config.llm.temperature}`);
           console.log('\nMarker:');
           console.log(`  GPU Enabled: ${config.marker.gpuEnabled}`);
           console.log(`  Batch Size: ${config.marker.batchSize}`);
@@ -265,9 +267,9 @@ async function main() {
       }
     });
 
-  /**
-   * Test command
-   */
+   /**
+    * Test command
+    */
   program
     .command('test')
     .description('Test the system configuration')
@@ -281,10 +283,11 @@ async function main() {
         console.log('  ✓ Configuration loaded');
 
         // Test API key
-        if (config.anthropic.apiKey) {
-          console.log('  ✓ Anthropic API key is set');
+        console.log(`\nLLM Provider: ${config.llm.provider.toUpperCase()}`);
+        if (config.llm.apiKey) {
+          console.log('  ✓ LLM API key is set');
         } else {
-          console.log('  ✗ Anthropic API key is missing');
+          console.log('  ✗ LLM API key is missing');
         }
 
         // Test output directory
@@ -295,6 +298,7 @@ async function main() {
         } catch {
           console.log('  ✗ Cannot write to output directory');
         }
+
 
         console.log('\n✅ System test complete\n');
         process.exit(0);

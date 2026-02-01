@@ -1,13 +1,13 @@
 /**
  * Analyze Node - LLM Analysis of Paper Content
- * Core analysis node using Claude LLM to extract insights from papers
+ * Core analysis node using GLM/Claude LLM to extract insights from papers
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { State, PaperAnalysis, KeyFinding, ResearchGap, RelatedPaper } from '../state/schema.js';
 import { createLogger } from '../utils/logger.js';
 import { getConfig } from '../config.js';
 import { searchPapers } from '../tools/WebSearch.js';
+import { callLLM, type LLMMessage } from '../utils/llmService.js';
 import type { StateUpdate } from '../state/schema.js';
 
 const logger = createLogger('AnalyzeNode');
@@ -15,19 +15,32 @@ const logger = createLogger('AnalyzeNode');
 /**
  * System prompt for paper analysis
  */
-const ANALYSIS_SYSTEM_PROMPT = `You are an expert academic research analyst with deep knowledge across multiple fields. Your task is to analyze research papers and extract key insights.
+const ANALYSIS_SYSTEM_PROMPT = `당신은 다양한 분야에 깊은 지식을 가진 전문 학술 연구 분석가입니다. 연구 논문을 분석하고 핵심 통찰을 추출하는 것이 작업입니다.
 
-For each paper, provide:
-1. Research Gaps: Identify what questions or problems the paper addresses that were not previously solved
-2. Related Papers: Suggest relevant papers that build on, contradict, or extend this work
-3. Key Findings: Extract the main contributions and discoveries with supporting evidence
-4. Methodology: Summarize the research approach and methods used
-5. Conclusions: Identify the main takeaways and implications
-6. Strengths: List what the paper does well
-7. Limitations: Identify weaknesses or constraints
-8. Suggestions: Provide recommendations for future work
+논문 분석 결과를 **한국어로** 마크다운 형식으로 작성해 주세요. 다음 항목들을 포함해야 합니다:
 
-Be thorough, accurate, and scholarly in your analysis.`;
+## 핵심 발견 (Key Findings)
+논문의 주요 발견 3-5개를 나열하세요.
+
+## 연구 갭 (Research Gaps)
+연구에서 식별된 공백이나 해결이 필요한 문제 2-3개를 나열하세요.
+
+## 연구 방법론 (Methodology)
+사용된 연구 방법에 대한 간략한 설명을 작성하세요.
+
+## 결론 (Conclusions)
+주요 시사점과 함의를 작성하세요.
+
+## 장점 (Strengths)
+논문이 잘한 점 2-3개를 나열하세요.
+
+## 한계점 (Limitations)
+논문의 약점이나 제약 2-3개를 나열하세요.
+
+## 향후 연구 제안 (Suggestions)
+향후 연구에 대한 권장사항 2-3개를 나열하세요.
+
+반드시 한국어로 작성하고, 각 항목을 명확하게 구분해서 응답하세요.`;
 
 /**
  * Analyze node - Analyzes paper content using Claude LLM
@@ -35,8 +48,6 @@ Be thorough, accurate, and scholarly in your analysis.`;
  * @returns State update with analysis results
  */
 export async function analyzeNode(state: State): Promise<StateUpdate> {
-  const config = getConfig();
-
   try {
     logger.info('Starting paper analysis');
 
@@ -47,33 +58,30 @@ export async function analyzeNode(state: State): Promise<StateUpdate> {
       };
     }
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
-      apiKey: config.anthropic.apiKey,
-    });
+    const config = getConfig();
 
     // Build the analysis prompt
     const userPrompt = buildAnalysisPrompt(state);
 
-    logger.info('Sending request to Claude LLM');
+    logger.info(`Sending request to ${config.llm.provider.toUpperCase()} LLM`);
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: config.anthropic.model,
-      max_tokens: config.anthropic.maxTokens,
-      temperature: config.anthropic.temperature,
-      system: ANALYSIS_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
+    // Call LLM API
+    const messages: LLMMessage[] = [
+      { role: 'system', content: ANALYSIS_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await callLLM(messages, {
+      maxTokens: config.llm.maxTokens,
+      temperature: config.llm.temperature,
     });
-
+    
+    // Debug: Log raw response
+    logger.info(`GLM Raw Response (first 500 chars): ${response.content.substring(0, 500)}`);
+    
     // Extract and parse the response
-    const analysis = parseAnalysisResponse(response);
-    const summary = extractSummary(state.markdown, response);
+    const analysis = parseAnalysisResponse(response.content);
+    const summary = extractSummary(state.markdown, response.content);
 
     logger.info('Analysis completed successfully');
 
@@ -234,27 +242,27 @@ function buildAnalysisPrompt(state: State): string {
   const maxMarkdownLength = 100000; // ~100k chars
   const truncatedMarkdown =
     markdown && markdown.length > maxMarkdownLength
-      ? markdown.substring(0, maxMarkdownLength) + '\n\n[Content truncated...]'
+      ? markdown.substring(0, maxMarkdownLength) + '\n\n[내용이 잘렸습니다...]'
       : markdown || '';
 
-  let prompt = 'Please analyze the following research paper';
+  let prompt = '다음 연구 논문을 분석해 주세요';
 
   if (query) {
-    prompt += ` with this research focus in mind: "${query}"`;
+    prompt += `. 연구 초점은 다음과 같습니다: "${query}"`;
   }
 
   prompt += '\n\n';
 
   if (state.metadata?.title) {
-    prompt += `Title: ${state.metadata.title}\n\n`;
+    prompt += `제목: ${state.metadata.title}\n\n`;
   }
 
   if (state.metadata?.authors) {
-    prompt += `Authors: ${state.metadata.authors.join(', ')}\n\n`;
+    prompt += `저자: ${state.metadata.authors.join(', ')}\n\n`;
   }
 
-  prompt += `Paper Content (Markdown format):\n\n${truncatedMarkdown}\n\n`;
-  prompt += `Please provide a comprehensive analysis following the structure outlined in the system prompt.`;
+  prompt += `논문 내용 (Markdown 형식):\n\n${truncatedMarkdown}\n\n`;
+  prompt += `시스템 프롬프트에 outlined된 구조를 따라 포괄적인 분석을 한국어로 제공해 주세요.`;
 
   return prompt;
 }
@@ -262,12 +270,8 @@ function buildAnalysisPrompt(state: State): string {
 /**
  * Parse the LLM response into structured analysis
  */
-function parseAnalysisResponse(response: Anthropic.Messages.Message): PaperAnalysis {
-  const text = response.content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n\n');
-
+function parseAnalysisResponse(text: string): PaperAnalysis {
+  
   // Initialize default analysis
   const analysis: PaperAnalysis = {
     researchGap: [],
@@ -279,9 +283,119 @@ function parseAnalysisResponse(response: Anthropic.Messages.Message): PaperAnaly
     limitations: [],
     suggestions: [],
   };
+  
+  // Try to parse JSON response
+  try {
+    // Extract JSON from response (handle potential markdown code blocks)
+    const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
+    const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : text;
+    
+    const parsed = JSON.parse(jsonString);
+    
+    // GLM sometimes returns {"answer": "..."} format
+    const content = parsed.answer || parsed.response || parsed.content || parsed;
+    
+    // If content is a string (not structured), try to parse it further
+    if (typeof content === 'string') {
+      // Try to extract structured data from the text content
+      return parseAnalysisResponseFromString(content);
+    }
+    
+    // Otherwise, parse from the structured JSON
+    return parseAnalysisResponseFromJSON(parsed);
+  } catch (error) {
+    logger.warn('JSON parsing failed, falling back to regex parsing', error);
+    
+    // Fallback to regex parsing (original logic)
+    return parseAnalysisResponseFromString(text);
+  }
+}
 
+/**
+ * Parse analysis from structured JSON object
+ */
+function parseAnalysisResponseFromJSON(parsed: any): PaperAnalysis {
+  const analysis: PaperAnalysis = {
+    researchGap: [],
+    relatedPapers: [],
+    keyFindings: [],
+    methodology: '',
+    conclusions: '',
+    strengths: [],
+    limitations: [],
+    suggestions: [],
+  };
+  
+  // Map JSON response to PaperAnalysis structure
+  if (parsed.keyFindings && Array.isArray(parsed.keyFindings)) {
+    analysis.keyFindings = parsed.keyFindings.map((f: any) => ({
+      title: f.title || 'Finding',
+      description: f.description || f.finding || f,
+      evidence: '',
+      confidence: 'medium',
+    }));
+  }
+  
+  if (parsed.researchGap && Array.isArray(parsed.researchGap)) {
+    analysis.researchGap = parsed.researchGap.map((g: any) => ({
+      category: 'general',
+      title: g.title || 'Research Gap',
+      description: g.description || g,
+      significance: 'medium',
+    }));
+  }
+  
+  if (parsed.relatedPapers && Array.isArray(parsed.relatedPapers)) {
+    analysis.relatedPapers = parsed.relatedPapers.map((p: any) => ({
+      title: p.title || 'Related Paper',
+      authors: p.author ? [p.author] : p.authors || [],
+      year: p.year || '',
+      relevance: p.relevance || '',
+      relevanceScore: 0.7,
+      relationship: 'similar',
+    }));
+  }
+  
+  if (parsed.methodology) {
+    analysis.methodology = parsed.methodology;
+  }
+  
+  if (parsed.conclusions) {
+    analysis.conclusions = parsed.conclusions;
+  }
+  
+  if (parsed.strengths && Array.isArray(parsed.strengths)) {
+    analysis.strengths = parsed.strengths;
+  }
+  
+  if (parsed.limitations && Array.isArray(parsed.limitations)) {
+    analysis.limitations = parsed.limitations;
+  }
+  
+  if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+    analysis.suggestions = parsed.suggestions;
+  }
+  
+  return analysis;
+}
+
+/**
+ * Parse analysis from string content (fallback method)
+ */
+function parseAnalysisResponseFromString(text: string): PaperAnalysis {
+  const analysis: PaperAnalysis = {
+    researchGap: [],
+    relatedPapers: [],
+    keyFindings: [],
+    methodology: '',
+    conclusions: '',
+    strengths: [],
+    limitations: [],
+    suggestions: [],
+  };
+  
   // Parse research gaps
-  const gapMatch = text.match(/(?:Research Gaps|Gaps)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const gapMatch = text.match(/(?:Research Gaps|Gaps|연구 공백|연구문제)[\s\S]*?(?=\n\n##|\n\n###|\n\n\d+\.|$)/i);
   if (gapMatch) {
     const gaps = parseListItems(gapMatch[0]);
     analysis.researchGap = gaps.map((g) => ({
@@ -290,9 +404,9 @@ function parseAnalysisResponse(response: Anthropic.Messages.Message): PaperAnaly
       significance: 'medium',
     }));
   }
-
+  
   // Parse related papers
-  const relatedMatch = text.match(/(?:Related Papers|Related Work)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const relatedMatch = text.match(/(?:Related Papers|Related Work|관련 논문)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (relatedMatch) {
     const papers = parseListItems(relatedMatch[0]);
     analysis.relatedPapers = papers.map((p) => ({
@@ -302,9 +416,9 @@ function parseAnalysisResponse(response: Anthropic.Messages.Message): PaperAnaly
       relationship: 'similar',
     }));
   }
-
+  
   // Parse key findings
-  const findingsMatch = text.match(/(?:Key Findings|Findings|Contributions)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const findingsMatch = text.match(/(?:Key Findings|Findings|Contributions|주요 발견|핵심 내용)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (findingsMatch) {
     const findings = parseListItems(findingsMatch[0]);
     analysis.keyFindings = findings.map((f) => ({
@@ -313,48 +427,45 @@ function parseAnalysisResponse(response: Anthropic.Messages.Message): PaperAnaly
       confidence: 'medium',
     }));
   }
-
+  
   // Extract methodology
-  const methodologyMatch = text.match(/(?:Methodology|Methods)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const methodologyMatch = text.match(/(?:Methodology|Methods|방법론)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (methodologyMatch) {
     analysis.methodology = extractParagraph(methodologyMatch[0]);
   }
-
+  
   // Extract conclusions
-  const conclusionsMatch = text.match(/(?:Conclusions|Conclusion|Summary)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const conclusionsMatch = text.match(/(?:Conclusions|Conclusion|Summary|결론)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (conclusionsMatch) {
     analysis.conclusions = extractParagraph(conclusionsMatch[0]);
   }
-
+  
   // Parse strengths
-  const strengthsMatch = text.match(/(?:Strengths|Advantages)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const strengthsMatch = text.match(/(?:Strengths|Advantages|장점)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (strengthsMatch) {
     analysis.strengths = parseListItems(strengthsMatch[0]);
   }
-
+  
   // Parse limitations
-  const limitationsMatch = text.match(/(?:Limitations|Weaknesses)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const limitationsMatch = text.match(/(?:Limitations|Weaknesses|한계점)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (limitationsMatch) {
     analysis.limitations = parseListItems(limitationsMatch[0]);
   }
-
+  
   // Parse suggestions
-  const suggestionsMatch = text.match(/(?:Suggestions|Future Work)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
+  const suggestionsMatch = text.match(/(?:Suggestions|Future Work|제안|향후 연구)[\s\S]*?(?=\n\n##|\n\n###|$)/i);
   if (suggestionsMatch) {
     analysis.suggestions = parseListItems(suggestionsMatch[0]);
   }
-
+  
   return analysis;
 }
 
 /**
  * Extract summary from markdown and response
  */
-function extractSummary(markdown: string, response: Anthropic.Messages.Message): string {
-  const text = response.content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n\n');
+function extractSummary(markdown: string, responseText: string): string {
+  const text = responseText;
 
   // Try to extract summary from the response
   const summaryMatch = text.match(/(?:Summary|Overview|Abstract)[\s\S]*?(?=\n\n##|\n\n###|$)/i);

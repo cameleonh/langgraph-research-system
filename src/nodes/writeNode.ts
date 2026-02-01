@@ -3,12 +3,12 @@
  * Generates a draft report based on the analysis results
  */
 
-import Anthropic from '@anthropic-ai/sdk';
 import type { State } from '../state/schema.js';
 import { createLogger } from '../utils/logger.js';
 import { getConfig } from '../config.js';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { callLLM, type LLMMessage } from '../utils/llmService.js';
 import type { StateUpdate } from '../state/schema.js';
 
 const logger = createLogger('WriteNode');
@@ -16,17 +16,17 @@ const logger = createLogger('WriteNode');
 /**
  * System prompt for draft generation
  */
-const DRAFT_SYSTEM_PROMPT = `You are an expert academic writer specializing in research papers and literature reviews. Your task is to generate comprehensive, well-structured drafts based on provided analysis.
+const DRAFT_SYSTEM_PROMPT = `당신은 연구 논문과 문헌 리뷰를 전문으로 작성하는 전문 학술 작가입니다. 제공된 분석 결과를 바탕으로 포괄적이고 잘 구조화된 초안을 작성해야 합니다.
 
-Your drafts should:
-1. Be clear, concise, and well-organized
-2. Follow academic writing standards
-3. Include proper citations and references
-4. Maintain a scholarly tone
-5. Be structured with appropriate headings and sections
-6. Synthesize information effectively
+작성하는 초안은 다음 요건을 충족해야 합니다:
+1. 명확하고 간결하며 잘 정리되어야 함
+2. 학술적 작성 표준을 따름
+3. 적절한 인용과 참고문헌 포함
+4. 학술적 어조 유지
+5. 적절한 제목과 섹션으로 구조화
+6. 정보를 효과적으로 종합
 
-Generate drafts that are publication-ready or very close to it.`;
+반드시 **한국어**로 작성해야 합니다. 출판 가능하거나 거의 완성된 수준의 초안을 작성하세요.`;
 
 /**
  * Write node - Generates draft based on analysis
@@ -34,8 +34,6 @@ Generate drafts that are publication-ready or very close to it.`;
  * @returns State update with generated draft
  */
 export async function writeNode(state: State): Promise<StateUpdate> {
-  const config = getConfig();
-
   try {
     logger.info('Starting draft generation');
 
@@ -46,32 +44,25 @@ export async function writeNode(state: State): Promise<StateUpdate> {
       };
     }
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
-      apiKey: config.anthropic.apiKey,
-    });
+    const config = getConfig();
 
     // Build the draft prompt
     const userPrompt = buildDraftPrompt(state);
 
-    logger.info('Sending draft generation request to Claude LLM');
+    logger.info(`Sending draft generation request to ${config.llm.provider.toUpperCase()} LLM`);
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: config.anthropic.model,
-      max_tokens: config.anthropic.maxTokens,
-      temperature: config.anthropic.temperature,
-      system: DRAFT_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
+    // Call LLM API
+    const messages: LLMMessage[] = [
+      { role: 'system', content: DRAFT_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await callLLM(messages, {
+      maxTokens: config.llm.maxTokens,
+      temperature: config.llm.temperature,
     });
 
-    // Extract the draft from response
-    const draft = extractDraft(response);
+    const draft = response.content;
 
     logger.info('Draft generated successfully');
 
@@ -151,8 +142,6 @@ export async function writeNodeWithTemplate(
  * @returns State update with literature review draft
  */
 export async function writeLiteratureReviewNode(state: State): Promise<StateUpdate> {
-  const config = getConfig();
-
   try {
     logger.info('Starting literature review generation');
 
@@ -163,32 +152,25 @@ export async function writeLiteratureReviewNode(state: State): Promise<StateUpda
       };
     }
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
-      apiKey: config.anthropic.apiKey,
-    });
+    const config = getConfig();
 
     // Build literature review prompt
     const userPrompt = buildLiteratureReviewPrompt(state);
 
-    logger.info('Sending literature review request to Claude LLM');
+    logger.info(`Sending literature review request to ${config.llm.provider.toUpperCase()} LLM`);
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: config.anthropic.model,
-      max_tokens: config.anthropic.maxTokens,
-      temperature: config.anthropic.temperature,
-      system: DRAFT_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
+    // Call LLM API
+    const messages: LLMMessage[] = [
+      { role: 'system', content: DRAFT_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await callLLM(messages, {
+      maxTokens: config.llm.maxTokens,
+      temperature: config.llm.temperature,
     });
 
-    // Extract the draft from response
-    const draft = extractDraft(response);
+    const draft = response.content;
 
     logger.info('Literature review generated successfully');
 
@@ -218,8 +200,6 @@ export async function writeLiteratureReviewNode(state: State): Promise<StateUpda
  * @returns State update with comparative analysis draft
  */
 export async function writeComparativeAnalysisNode(state: State): Promise<StateUpdate> {
-  const config = getConfig();
-
   try {
     logger.info('Starting comparative analysis generation');
 
@@ -230,32 +210,25 @@ export async function writeComparativeAnalysisNode(state: State): Promise<StateU
       };
     }
 
-    // Initialize Anthropic client
-    const anthropic = new Anthropic({
-      apiKey: config.anthropic.apiKey,
-    });
+    const config = getConfig();
 
     // Build comparative analysis prompt
     const userPrompt = buildComparativeAnalysisPrompt(state);
 
-    logger.info('Sending comparative analysis request to Claude LLM');
+    logger.info(`Sending comparative analysis request to ${config.llm.provider.toUpperCase()} LLM`);
 
-    // Call Claude API
-    const response = await anthropic.messages.create({
-      model: config.anthropic.model,
-      max_tokens: config.anthropic.maxTokens,
-      temperature: config.anthropic.temperature,
-      system: DRAFT_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: userPrompt,
-        },
-      ],
+    // Call LLM API
+    const messages: LLMMessage[] = [
+      { role: 'system', content: DRAFT_SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt },
+    ];
+
+    const response = await callLLM(messages, {
+      maxTokens: config.llm.maxTokens,
+      temperature: config.llm.temperature,
     });
 
-    // Extract the draft from response
-    const draft = extractDraft(response);
+    const draft = response.content;
 
     logger.info('Comparative analysis generated successfully');
 
@@ -285,39 +258,39 @@ export async function writeComparativeAnalysisNode(state: State): Promise<StateU
 function buildDraftPrompt(state: State): string {
   const { query, analysis, summary, metadata } = state;
 
-  let prompt = 'Please generate a comprehensive research report based on the following analysis:\n\n';
+  let prompt = '다음 분석 결과를 바탕으로 포괄적인 연구 보고서를 한국어로 작성해 주세요:\n\n';
 
   if (query) {
-    prompt += `Research Focus: ${query}\n\n`;
+    prompt += `연구 주제: ${query}\n\n`;
   }
 
   if (metadata?.title) {
-    prompt += `Paper Title: ${metadata.title}\n\n`;
+    prompt += `논문 제목: ${metadata.title}\n\n`;
   }
 
   if (summary) {
-    prompt += `Summary:\n${summary}\n\n`;
+    prompt += `요약:\n${summary}\n\n`;
   }
 
-  prompt += '## Analysis Results\n\n';
+  prompt += '## 분석 결과\n\n';
 
   if (analysis?.methodology) {
-    prompt += `### Methodology\n${analysis.methodology}\n\n`;
+    prompt += `### 연구 방법론\n${analysis.methodology}\n\n`;
   }
 
   if (analysis?.keyFindings && analysis.keyFindings.length > 0) {
-    prompt += '### Key Findings\n';
+    prompt += '### 핵심 발견\n';
     analysis.keyFindings.forEach((finding, index) => {
       prompt += `${index + 1}. ${finding.finding}\n`;
       if (finding.evidence) {
-        prompt += `   Evidence: ${finding.evidence}\n`;
+        prompt += `   근거: ${finding.evidence}\n`;
       }
     });
     prompt += '\n';
   }
 
   if (analysis?.researchGap && analysis.researchGap.length > 0) {
-    prompt += '### Research Gaps Addressed\n';
+    prompt += '### 해결된 연구 갭\n';
     analysis.researchGap.forEach((gap, index) => {
       prompt += `${index + 1}. ${gap.description}\n`;
     });
@@ -325,11 +298,11 @@ function buildDraftPrompt(state: State): string {
   }
 
   if (analysis?.conclusions) {
-    prompt += `### Conclusions\n${analysis.conclusions}\n\n`;
+    prompt += `### 결론\n${analysis.conclusions}\n\n`;
   }
 
   if (analysis?.limitations && analysis.limitations.length > 0) {
-    prompt += '### Limitations\n';
+    prompt += '### 한계점\n';
     analysis.limitations.forEach((limitation, index) => {
       prompt += `- ${limitation}\n`;
     });
@@ -337,14 +310,14 @@ function buildDraftPrompt(state: State): string {
   }
 
   if (analysis?.suggestions && analysis.suggestions.length > 0) {
-    prompt += '### Suggestions for Future Work\n';
+    prompt += '### 향후 연구 제안\n';
     analysis.suggestions.forEach((suggestion, index) => {
       prompt += `${index + 1}. ${suggestion}\n`;
     });
     prompt += '\n';
   }
 
-  prompt += 'Please generate a well-structured research report that synthesizes this information effectively.';
+  prompt += '이 정보를 종합하여 잘 구조화된 연구 보고서를 한국어로 작성해 주세요.';
 
   return prompt;
 }
@@ -456,16 +429,6 @@ function buildComparativeAnalysisPrompt(state: State): string {
   prompt += '5. Provides an overall conclusion\n';
 
   return prompt;
-}
-
-/**
- * Extract draft from Claude response
- */
-function extractDraft(response: Anthropic.Messages.Message): string {
-  return response.content
-    .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-    .map((block) => block.text)
-    .join('\n\n');
 }
 
 /**

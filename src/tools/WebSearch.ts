@@ -66,7 +66,9 @@ export class WebSearch {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -363,7 +365,9 @@ export class WebSearch {
 
       return {
         success: false,
-        error: 'Could not extract abstract from page',
+        data: undefined,
+        error: 'Abstract not found',
+        metadata: undefined,
       };
 
     } catch (error) {
@@ -372,7 +376,9 @@ export class WebSearch {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }

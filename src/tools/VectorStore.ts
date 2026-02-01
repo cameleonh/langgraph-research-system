@@ -106,7 +106,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -165,7 +167,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -210,7 +214,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -233,7 +239,9 @@ export class VectorStore {
       if (results.ids.length === 0) {
         return {
           success: false,
+          data: undefined,
           error: `Paper not found: ${id}`,
+          metadata: undefined,
         };
       }
 
@@ -258,7 +266,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -277,7 +287,9 @@ export class VectorStore {
       if (results.ids.length === 0) {
         return {
           success: false,
+          data: undefined,
           error: `Paper not found: ${id}`,
+          metadata: undefined,
         };
       }
 
@@ -297,7 +309,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -335,7 +349,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }
@@ -362,7 +378,9 @@ export class VectorStore {
 
       return {
         success: false,
+        data: undefined,
         error: errorMessage,
+        metadata: undefined,
       };
     }
   }

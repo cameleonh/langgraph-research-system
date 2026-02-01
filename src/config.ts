@@ -3,8 +3,20 @@
  * Loads environment variables and provides typed access to configuration
  */
 
+import 'dotenv/config';
+
 export interface Config {
-  // Anthropic Claude API Configuration
+  // LLM Configuration (GLM-4.7)
+  llm: {
+    provider: 'anthropic' | 'glm';
+    apiKey: string;
+    model: string;
+    baseURL: string;
+    maxTokens: number;
+    temperature: number;
+  };
+
+  // Anthropic Claude API Configuration (legacy)
   anthropic: {
     apiKey: string;
     model: string;
@@ -69,7 +81,17 @@ function parseNumber(value: string, defaultValue: number): number {
  * Load and validate configuration from environment variables
  */
 export function loadConfig(): Config {
+  const provider = (process.env.LLM_PROVIDER || 'anthropic') as 'anthropic' | 'glm';
+
   const config: Config = {
+    llm: {
+      provider,
+      apiKey: process.env.LLM_API_KEY || '',
+      model: process.env.LLM_MODEL || 'glm-4.7',
+      baseURL: process.env.LLM_BASE_URL || 'https://api.z.ai/api/coding/paas/v4',
+      maxTokens: parseNumber(process.env.LLM_MAX_TOKENS || '8192', 8192),
+      temperature: parseNumber(process.env.LLM_TEMPERATURE || '0.7', 0.7),
+    },
     anthropic: {
       apiKey: process.env.ANTHROPIC_API_KEY || '',
       model: process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022',
@@ -110,8 +132,8 @@ export function loadConfig(): Config {
   };
 
   // Validate critical configuration
-  if (!config.anthropic.apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is required but not set');
+  if (!config.llm.apiKey) {
+    throw new Error('LLM_API_KEY is required but not set');
   }
 
   return config;
